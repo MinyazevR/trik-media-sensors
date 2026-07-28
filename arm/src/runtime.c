@@ -21,39 +21,27 @@ static const RuntimeConfig s_runtimeConfig = {
 
 void runtimeReset(Runtime* _runtime) {
   memset(_runtime, 0, sizeof(*_runtime));
-
   _runtime->m_config = s_runtimeConfig;
-
-  memset(&_runtime->m_modules.m_v4l2Input, 0, sizeof(_runtime->m_modules.m_v4l2Input));
   _runtime->m_modules.m_v4l2Input.m_fd = -1;
-  memset(&_runtime->m_modules.m_fbOutput, 0, sizeof(_runtime->m_modules.m_fbOutput));
   _runtime->m_modules.m_fbOutput.m_fd = -1;
-  memset(&_runtime->m_modules.m_rcInput, 0, sizeof(_runtime->m_modules.m_rcInput));
-  memset(&_runtime->m_modules.m_dsp, 0, sizeof(_runtime->m_modules.m_dsp));
   _runtime->m_modules.m_rcInput.m_fifoInputFd = -1;
   _runtime->m_modules.m_rcInput.m_fifoOutputFd = -1;
-
-  memset(&_runtime->m_threads, 0, sizeof(_runtime->m_threads));
   _runtime->m_threads.m_terminate = true;
-
   pthread_mutex_init(&_runtime->m_state.m_mutex, NULL);
-  memset(&_runtime->m_state.m_targetDetectParams, 0, sizeof(_runtime->m_state.m_targetDetectParams));
-  memset(&_runtime->m_state.m_targetDetectCommand, 0, sizeof(_runtime->m_state.m_targetDetectCommand));
 }
 
-static enum trik_cv_algorithm trik_cv_algorithm_from_string(char* string) {
+static enum trik_cv_algorithm trik_cv_algorithm_from_string(const char* string) {
   if (strcmp(string, "motion_sensor") == 0)
     return TRIK_CV_ALGORITHM_MOTION_SENSOR;
-  else if (strcmp(string, "edge_line_sensor") == 0)
+  if (strcmp(string, "edge_line_sensor") == 0)
     return TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR;
-  else if (strcmp(string, "object_sensor") == 0)
+  if (strcmp(string, "object_sensor") == 0)
     return TRIK_CV_ALGORITHM_OBJECT_SENSOR;
-  else if (strcmp(string, "line_sensor") == 0)
+  if (strcmp(string, "line_sensor") == 0)
     return TRIK_CV_ALGORITHM_LINE_SENSOR;
-  else if (strcmp(string, "mxn_sensor") == 0)
+  if (strcmp(string, "mxn_sensor") == 0)
     return TRIK_CV_ALGORITHM_MXN_SENSOR;
-  else
-    return TRIK_CV_ALGORITHM_NONE;
+  return TRIK_CV_ALGORITHM_NONE;
 }
 
 bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
