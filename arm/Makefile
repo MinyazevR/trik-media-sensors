@@ -30,7 +30,7 @@
 #  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-srcs = src/main.c src/arm_server.c src/module_fb.c src/module_rc.c src/module_v4l2.c src/runtime.c src/thread_input.c src/thread_video.c
+srcs = src/main.c src/args.c src/arm_server.c src/module_fb.c src/module_rc.c src/module_v4l2.c src/runtime.c src/thread_input.c src/thread_video.c
 
 EXBASE = ..
 include $(EXBASE)/products.mak

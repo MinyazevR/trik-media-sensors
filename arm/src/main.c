@@ -11,6 +11,7 @@
 #include <ti/ipc/MultiProc.h>
 
 #include "trik/sensors/runtime.h"
+#include "trik/sensors/args.h"
 #include <errno.h>
 #include <signal.h>
 #include <sysexits.h>
@@ -58,8 +59,8 @@ int main(int _argc, char* const _argv[]) {
   const char* arg0 = _argv[0];
 
   runtimeReset(&runtime);
-  if (!runtimeParseArgs(&runtime, _argc, _argv)) {
-    runtimeArgsHelpMessage(&runtime, arg0);
+  if (!argsParse(&runtime, _argc, _argv)) {
+    argsHelp(&runtime, arg0);
     exit_code = EX_USAGE;
     goto exit;
   }
