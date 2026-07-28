@@ -8,6 +8,7 @@
 #include <time.h>
 
 #include "trik/sensors/cv_algorithm_args.h"
+#include "trik/sensors/log.h"
 #include "trik/sensors/module_rc.h"
 #include "trik/sensors/runtime.h"
 #include "trik/sensors/thread_input.h"
@@ -31,13 +32,13 @@ static int threadInputSelectLoop(Runtime* _runtime, RCInput* _rc) {
 
   if ((res = pselect(maxFd + 1, &fdsIn, NULL, NULL, &s_selectTimeout, NULL)) < 0) {
     res = errno;
-    fprintf(stderr, "pselect() failed: %d\n", res);
+    LOG(LOG_ERROR, "pselect() failed: %d", res);
     return res;
   }
 
   if (_rc->m_fifoInputFd != -1 && FD_ISSET(_rc->m_fifoInputFd, &fdsIn)) {
     if ((res = rcInputReadFifoInput(_rc)) != 0) {
-      fprintf(stderr, "rcInputReadFifoInput() failed: %d\n", res);
+      LOG(LOG_ERROR, "rcInputReadFifoInput() failed: %d", res);
       return res;
     }
   }
@@ -45,44 +46,44 @@ static int threadInputSelectLoop(Runtime* _runtime, RCInput* _rc) {
   trik_cv_algorithm_in_args targetDetectParams;
   if ((res = rcInputGetTargetDetectParams(_rc, &targetDetectParams)) != 0) {
     if (res != ENODATA) {
-      fprintf(stderr, "rcInputGetTargetDetectParams() failed: %d\n", res);
+      LOG(LOG_ERROR, "rcInputGetTargetDetectParams() failed: %d", res);
       return res;
     }
   } else if ((res = runtimeSetTargetDetectParams(_runtime, &targetDetectParams)) != 0) {
-    fprintf(stderr, "runtimeSetTargetDetectParams() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeSetTargetDetectParams() failed: %d", res);
     return res;
   }
 
   bool videoOutEnable;
   if ((res = rcInputGetVideoOutParams(_rc, &videoOutEnable)) != 0) {
     if (res != ENODATA) {
-      fprintf(stderr, "rcInputGetVideoOutParams() failed: %d\n", res);
+      LOG(LOG_ERROR, "rcInputGetVideoOutParams() failed: %d", res);
       return res;
     }
   } else if ((res = runtimeSetVideoOutParams(_runtime, &videoOutEnable)) != 0) {
-    fprintf(stderr, "runtimeSetVideoOutParams() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeSetVideoOutParams() failed: %d", res);
     return res;
   }
 
   TargetDetectCommand targetDetectCommand;
   if ((res = rcInputGetTargetDetectCommand(_rc, &targetDetectCommand)) != 0) {
     if (res != ENODATA) {
-      fprintf(stderr, "rcInputGetTargetDetectCommand() failed: %d\n", res);
+      LOG(LOG_ERROR, "rcInputGetTargetDetectCommand() failed: %d", res);
       return res;
     }
   } else if ((res = runtimeSetTargetDetectCommand(_runtime, &targetDetectCommand)) != 0) {
-    fprintf(stderr, "runtimeSetTargetDetectCommand() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeSetTargetDetectCommand() failed: %d", res);
     return res;
   }
 
   MxnParams mxnParams;
   if ((res = rcInputGetMxNParams(_rc, &mxnParams)) != 0) {
     if (res != ENODATA) {
-      fprintf(stderr, "rcInputGetMxNParams() failed: %d\n", res);
+      LOG(LOG_ERROR, "rcInputGetMxNParams() failed: %d", res);
       return res;
     }
   } else if ((res = runtimeSetMxNParams(_runtime, &mxnParams)) != 0) {
-    fprintf(stderr, "runtimeSetMxNParams() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeSetMxNParams() failed: %d", res);
     return res;
   }
 
@@ -106,20 +107,20 @@ void* threadInput(void* _arg) {
   }
 
   if ((res = rcInputOpen(rc, runtimeCfgRCInput(runtime))) != 0) {
-    fprintf(stderr, "rcInputOpen() failed: %d\n", res);
+    LOG(LOG_ERROR, "rcInputOpen() failed: %d", res);
     exit_code = res;
     goto exit;
   }
 
   if ((res = rcInputStart(rc)) != 0) {
-    fprintf(stderr, "rcInputStart() failed: %d\n", res);
+    LOG(LOG_ERROR, "rcInputStart() failed: %d", res);
     exit_code = res;
     goto exit_rc_close;
   }
 
   while (!runtimeGetTerminate(runtime)) {
     if ((res = threadInputSelectLoop(runtime, rc)) != 0) {
-      fprintf(stderr, "threadInputSelectLoop() failed: %d\n", res);
+      LOG(LOG_ERROR, "threadInputSelectLoop() failed: %d", res);
       exit_code = res;
       goto exit_rc_stop;
     }
@@ -127,11 +128,11 @@ void* threadInput(void* _arg) {
 
 exit_rc_stop:
   if ((res = rcInputStop(rc)) != 0)
-    fprintf(stderr, "rcInputStop() failed: %d\n", res);
+    LOG(LOG_ERROR, "rcInputStop() failed: %d", res);
 
 exit_rc_close:
   if ((res = rcInputClose(rc)) != 0)
-    fprintf(stderr, "rcInputClose() failed: %d\n", res);
+    LOG(LOG_ERROR, "rcInputClose() failed: %d", res);
 
 exit:
   runtimeSetTerminate(runtime);

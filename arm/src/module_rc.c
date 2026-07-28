@@ -13,6 +13,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "trik/sensors/log.h"
 #include "trik/sensors/module_rc.h"
 
 static int do_openFifoInput(RCInput* _rc, const char* _fifoInputName) {
@@ -32,13 +33,13 @@ static int do_openFifoInput(RCInput* _rc, const char* _fifoInputName) {
   if (mkfifo(_fifoInputName, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP) < 0) {
     res = errno;
     if (res != EEXIST)
-      fprintf(stderr, "mkfifo(%s) failed, continuing: %d\n", _fifoInputName, res);
+      LOG(LOG_ERROR, "mkfifo(%s) failed, continuing: %d", _fifoInputName, res);
   }
 
   _rc->m_fifoInputFd = open(_fifoInputName, O_RDWR | O_NONBLOCK);
   if (_rc->m_fifoInputFd < 0) {
     res = errno;
-    fprintf(stderr, "open(%s) failed: %d\n", _fifoInputName, errno);
+    LOG(LOG_ERROR, "open(%s) failed: %d", _fifoInputName, errno);
     _rc->m_fifoInputFd = -1;
     unlink(_fifoInputName);
     return res;
@@ -58,7 +59,7 @@ static int do_closeFifoInput(RCInput* _rc) {
 
   if (_rc->m_fifoInputFd != -1 && close(_rc->m_fifoInputFd) != 0) {
     res = errno;
-    fprintf(stderr, "close() failed: %d\n", res);
+    LOG(LOG_ERROR, "close() failed: %d", res);
     exit_code = res;
   }
   _rc->m_fifoInputFd = -1;
@@ -67,7 +68,7 @@ static int do_closeFifoInput(RCInput* _rc) {
     if (unlink(_rc->m_fifoInputName) != 0) {
       res = errno;
       if (res != EBUSY) {
-        fprintf(stderr, "unlink(%s) failed: %d\n", _rc->m_fifoInputName, res);
+        LOG(LOG_ERROR, "unlink(%s) failed: %d", _rc->m_fifoInputName, res);
         exit_code = res;
       }
     }
@@ -85,7 +86,7 @@ static int do_reopenFifoInput(RCInput* _rc) {
 
   if (_rc->m_fifoInputFd != -1 && close(_rc->m_fifoInputFd) != 0) {
     res = errno;
-    fprintf(stderr, "close() failed: %d\n", res);
+    LOG(LOG_ERROR, "close() failed: %d", res);
     _rc->m_fifoInputFd = -1;
     return res;
   }
@@ -93,7 +94,7 @@ static int do_reopenFifoInput(RCInput* _rc) {
   _rc->m_fifoInputFd = open(_rc->m_fifoInputName, O_RDONLY | O_NONBLOCK);
   if (_rc->m_fifoInputFd < 0) {
     res = errno;
-    fprintf(stderr, "open(%s) failed: %d\n", _rc->m_fifoInputName, errno);
+    LOG(LOG_ERROR, "open(%s) failed: %d", _rc->m_fifoInputName, errno);
     _rc->m_fifoInputFd = -1;
     return res;
   }
@@ -118,13 +119,13 @@ static int do_openFifoOutput(RCInput* _rc, const char* _fifoOutputName) {
   if (mkfifo(_fifoOutputName, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP) < 0) {
     res = errno;
     if (res != EEXIST)
-      fprintf(stderr, "mkfifo(%s) failed, continuing: %d\n", _fifoOutputName, res);
+      LOG(LOG_ERROR, "mkfifo(%s) failed, continuing: %d", _fifoOutputName, res);
   }
 
   int fifoOutputRdFd = open(_fifoOutputName, O_RDONLY | O_NONBLOCK);
   if (fifoOutputRdFd < 0) {
     res = errno;
-    fprintf(stderr, "open(%s, RD_ONLY side) failed: %d\n", _fifoOutputName, errno);
+    LOG(LOG_ERROR, "open(%s, RD_ONLY side) failed: %d", _fifoOutputName, errno);
     unlink(_fifoOutputName);
     return res;
   }
@@ -132,7 +133,7 @@ static int do_openFifoOutput(RCInput* _rc, const char* _fifoOutputName) {
   _rc->m_fifoOutputFd = open(_fifoOutputName, O_WRONLY | O_NONBLOCK);
   if (_rc->m_fifoOutputFd < 0) {
     res = errno;
-    fprintf(stderr, "open(%s, WR_ONLY side) failed: %d\n", _fifoOutputName, errno);
+    LOG(LOG_ERROR, "open(%s, WR_ONLY side) failed: %d", _fifoOutputName, errno);
     close(fifoOutputRdFd);
     _rc->m_fifoOutputFd = -1;
     unlink(_fifoOutputName);
@@ -141,7 +142,7 @@ static int do_openFifoOutput(RCInput* _rc, const char* _fifoOutputName) {
 
   if (close(fifoOutputRdFd) != 0) {
     res = errno;
-    fprintf(stderr, "close(RD_ONLY side) failed: %d\n", res);
+    LOG(LOG_ERROR, "close(RD_ONLY side) failed: %d", res);
   }
 
   _rc->m_fifoOutputName = strdup(_fifoOutputName);
@@ -158,7 +159,7 @@ static int do_closeFifoOutput(RCInput* _rc) {
 
   if (_rc->m_fifoOutputFd != -1 && close(_rc->m_fifoOutputFd) != 0) {
     res = errno;
-    fprintf(stderr, "close() failed: %d\n", res);
+    LOG(LOG_ERROR, "close() failed: %d", res);
     exit_code = res;
   }
   _rc->m_fifoOutputFd = -1;
@@ -167,7 +168,7 @@ static int do_closeFifoOutput(RCInput* _rc) {
     if (unlink(_rc->m_fifoOutputName) != 0) {
       res = errno;
       if (res != EBUSY) {
-        fprintf(stderr, "unlink(%s) failed: %d\n", _rc->m_fifoOutputName, res);
+        LOG(LOG_ERROR, "unlink(%s) failed: %d", _rc->m_fifoOutputName, res);
         exit_code = res;
       }
     }
@@ -211,7 +212,7 @@ static int do_readFifoInput(RCInput* _rc) {
     return EBUSY;
 
   if (_rc->m_fifoInputReadBufferUsed >= _rc->m_fifoInputReadBufferSize - 1) {
-    fprintf(stderr, "Input fifo overflow, truncated\n");
+    LOG(LOG_ERROR, "Input fifo overflow, truncated");
     _rc->m_fifoInputReadBufferUsed = 0;
   }
 
@@ -219,18 +220,18 @@ static int do_readFifoInput(RCInput* _rc) {
   const ssize_t read_res = read(_rc->m_fifoInputFd, _rc->m_fifoInputReadBuffer + _rc->m_fifoInputReadBufferUsed, available);
   if (read_res <= 0) {
     if (read_res == 0)
-      fprintf(stderr, "read(%d, %zu) eof\n", _rc->m_fifoInputFd, available);
+      LOG(LOG_ERROR, "read(%d, %zu) eof", _rc->m_fifoInputFd, available);
     else {
       res = errno;
-      fprintf(stderr, "read(%d, %zu) failed: %d\n", _rc->m_fifoInputFd, available, res);
+      LOG(LOG_ERROR, "read(%d, %zu) failed: %d", _rc->m_fifoInputFd, available, res);
     }
 
     if ((res = do_reopenFifoInput(_rc)) != 0) {
-      fprintf(stderr, "reopen fifo input failed: %d\n", res);
+      LOG(LOG_ERROR, "reopen fifo input failed: %d", res);
       return res;
     }
 
-    fprintf(stderr, "reopened input fifo\n");
+    LOG(LOG_ERROR, "reopened input fifo");
 
     return 0;
   }
@@ -251,7 +252,7 @@ static int do_readFifoInput(RCInput* _rc) {
       parseAt += strlen("hsv ");
 
       if ((sscanf(parseAt, "%d %d %d %d %d %d", &hue, &hueTol, &sat, &satTol, &val, &valTol)) != 6)
-        fprintf(stderr, "Cannot parse hsv command, args '%s'\n", parseAt);
+        LOG(LOG_ERROR, "Cannot parse hsv command, args '%s'", parseAt);
       else {
         _rc->m_targetDetectHue = hue;
         _rc->m_targetDetectHueTolerance = hueTol;
@@ -266,7 +267,7 @@ static int do_readFifoInput(RCInput* _rc) {
       parseAt += strlen("mxn ");
 
       if ((sscanf(parseAt, "%d %d", &m, &n)) != 2)
-        fprintf(stderr, "Cannot parse mxn command, args '%s'\n", parseAt);
+        LOG(LOG_ERROR, "Cannot parse mxn command, args '%s'", parseAt);
       else
       {
         _rc->m_extraRCInput.m_mxnParamsInput.m_mxnParams.m_m    = m < COLORS_WIDTHM_MAX ? m : COLORS_WIDTHM_MAX;
@@ -278,13 +279,13 @@ static int do_readFifoInput(RCInput* _rc) {
       parseAt += strlen("video_out ");
 
       if ((sscanf(parseAt, "%d", &videoOutEnable)) != 1)
-        fprintf(stderr, "Cannot parse video_out command, args '%s'\n", parseAt);
+        LOG(LOG_ERROR, "Cannot parse video_out command, args '%s'", parseAt);
       else {
         _rc->m_videoOutEnable = videoOutEnable;
         _rc->m_videoOutParamsUpdated = true;
       }
     } else
-      fprintf(stderr, "Unknown command '%s'\n", parseAt);
+      LOG(LOG_ERROR, "Unknown command '%s'", parseAt);
 
     parseAt = parseTill + 1;
   }
@@ -295,8 +296,7 @@ static int do_readFifoInput(RCInput* _rc) {
   return 0;
 }
 
-int rcInputInit(bool _verbose) {
-  (void) _verbose;
+int rcInputInit(void) {
   return 0;
 }
 

@@ -3,57 +3,20 @@
 
 #include <stdio.h>
 
-#ifdef DEBUG
+typedef enum { LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG } log_level_t;
 
-#define debugf(...)                                                                                                                                            \
-  do {                                                                                                                                                         \
-    printf("D %s(): ", __func__);                                                                                                                              \
-    printf(__VA_ARGS__);                                                                                                                                       \
-    printf("\n");                                                                                                                                              \
-    fflush(stdout);                                                                                                                                            \
-  } while (0)
-#define infof(...)                                                                                                                                             \
-  do {                                                                                                                                                         \
-    printf(__VA_ARGS__);                                                                                                                                       \
-    printf("\n");                                                                                                                                              \
-    fflush(stdout);                                                                                                                                            \
-  } while (0)
-#define warnf(...)                                                                                                                                             \
-  do {                                                                                                                                                         \
-    printf("W %s(): ", __func__);                                                                                                                              \
-    printf(__VA_ARGS__);                                                                                                                                       \
-    printf("\n");                                                                                                                                              \
-    fflush(stdout);                                                                                                                                            \
-  } while (0)
-#define errorf(...)                                                                                                                                            \
-  do {                                                                                                                                                         \
-    fprintf(stderr, "E %s(): ", __func__);                                                                                                                     \
-    fprintf(stderr, __VA_ARGS__);                                                                                                                              \
-    fprintf(stderr, "\n");                                                                                                                                     \
-    fflush(stderr);                                                                                                                                            \
-  } while (0)
+extern log_level_t g_log_level;
 
-#else
+#define LOG(level, fmt, ...) do { \
+    if ((level) <= g_log_level) { \
+        fprintf((level) <= LOG_WARN ? stderr : stdout, \
+                "%c %s:%d: " fmt "\n", \
+                "EWID"[level], __func__, __LINE__, ##__VA_ARGS__); \
+        fflush((level) <= LOG_WARN ? stderr : stdout); \
+    } \
+} while (0)
 
-#define debugf(...)
-#define infof(...)                                                                                                                                             \
-  do {                                                                                                                                                         \
-    printf(__VA_ARGS__);                                                                                                                                       \
-    printf("\n");                                                                                                                                              \
-  } while (0)
-#define warnf(...)                                                                                                                                             \
-  do {                                                                                                                                                         \
-    printf("W %s(): ", __func__);                                                                                                                              \
-    printf(__VA_ARGS__);                                                                                                                                       \
-    printf("\n");                                                                                                                                              \
-  } while (0)
-#define errorf(...)                                                                                                                                            \
-  do {                                                                                                                                                         \
-    fprintf(stderr, "E %s(): ", __func__);                                                                                                                     \
-    fprintf(stderr, __VA_ARGS__);                                                                                                                              \
-    fprintf(stderr, "\n");                                                                                                                                     \
-  } while (0)
-
-#endif
+static inline void log_set_level(log_level_t _level) { g_log_level = _level; }
+static inline log_level_t log_get_level(void)  { return g_log_level; }
 
 #endif

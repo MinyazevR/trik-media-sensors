@@ -12,6 +12,7 @@
 
 #include <linux/videodev2.h> // pixel formats
 
+#include "trik/sensors/log.h"
 #include "trik/sensors/module_fb.h"
 
 static int do_fbOutputOpen(FBOutput* _fb, const char* _path) {
@@ -23,7 +24,7 @@ static int do_fbOutputOpen(FBOutput* _fb, const char* _path) {
   _fb->m_fd = open(_path, O_RDWR | O_SYNC, 0);
   if (_fb->m_fd < 0) {
     res = errno;
-    fprintf(stderr, "open(%s) failed: %d\n", _path, res);
+    LOG(LOG_ERROR, "open(%s) failed: %d", _path, res);
     _fb->m_fd = -1;
     return res;
   }
@@ -38,7 +39,7 @@ static int do_fbOutputClose(FBOutput* _fb) {
 
   if (close(_fb->m_fd) != 0) {
     res = errno;
-    fprintf(stderr, "close() failed: %d\n", res);
+    LOG(LOG_ERROR, "close() failed: %d", res);
     return res;
   }
 
@@ -56,13 +57,13 @@ static int do_fbOutputSetFormat(FBOutput* _fb) {
 
   if (ioctl(_fb->m_fd, FBIOGET_FSCREENINFO, &_fb->m_fbFixInfo) != 0) {
     res = errno;
-    fprintf(stderr, "ioctl(FBIOGET_FSCREENINFO) failed: %d\n", res);
+    LOG(LOG_ERROR, "ioctl(FBIOGET_FSCREENINFO) failed: %d", res);
     return res;
   }
 
   if (ioctl(_fb->m_fd, FBIOGET_VSCREENINFO, &_fb->m_fbVarInfo) != 0) {
     res = errno;
-    fprintf(stderr, "ioctl(FBIOGET_VSCREENINFO) failed: %d\n", res);
+    LOG(LOG_ERROR, "ioctl(FBIOGET_VSCREENINFO) failed: %d", res);
     return res;
   }
 
@@ -104,7 +105,7 @@ static int do_fbOutputMmap(FBOutput* _fb) {
   _fb->m_fbPtr = mmap(NULL, _fb->m_fbSize, PROT_READ | PROT_WRITE, MAP_SHARED, _fb->m_fd, 0);
   if (_fb->m_fbPtr == MAP_FAILED) {
     res = errno;
-    fprintf(stderr, "mmap(%zu) failed: %d\n", _fb->m_fbSize, res);
+    LOG(LOG_ERROR, "mmap(%zu) failed: %d", _fb->m_fbSize, res);
     return res;
   }
 
@@ -116,7 +117,7 @@ static int do_fbOutputMunmap(FBOutput* _fb) {
   if (_fb->m_fbPtr != MAP_FAILED) {
     if (munmap(_fb->m_fbPtr, _fb->m_fbSize) != 0) {
       res = errno;
-      fprintf(stderr, "munmap(%p, %zu) failed: %d\n", _fb->m_fbPtr, _fb->m_fbSize, res);
+      LOG(LOG_ERROR, "munmap(%p, %zu) failed: %d", _fb->m_fbPtr, _fb->m_fbSize, res);
     }
     _fb->m_fbPtr = MAP_FAILED;
     _fb->m_fbSize = 0;
@@ -138,8 +139,7 @@ static int do_fbOutputGetFrame(FBOutput* _fb, void** _framePtr, size_t* _frameSi
   return 0;
 }
 
-int fbOutputInit(bool _verbose) {
-  (void) _verbose;
+int fbOutputInit(void) {
   return 0;
 }
 

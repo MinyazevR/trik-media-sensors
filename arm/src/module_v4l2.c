@@ -13,6 +13,7 @@
 #include <libv4l2.h>
 #include <linux/videodev2.h>
 
+#include "trik/sensors/log.h"
 #include "trik/sensors/module_v4l2.h"
 
 static int do_v4l2InputOpen(V4L2Input* _v4l2, const char* _path) {
@@ -24,7 +25,7 @@ static int do_v4l2InputOpen(V4L2Input* _v4l2, const char* _path) {
   _v4l2->m_fd = open(_path, O_RDWR | O_NONBLOCK, 0);
   if (_v4l2->m_fd < 0) {
     res = errno;
-    fprintf(stderr, "v4l2_open(%s) failed: %d\n", _path, res);
+    LOG(LOG_ERROR, "v4l2_open(%s) failed: %d", _path, res);
     _v4l2->m_fd = -1;
     return res;
   }
@@ -39,7 +40,7 @@ static int do_v4l2InputClose(V4L2Input* _v4l2) {
 
   if (close(_v4l2->m_fd) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_close() failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_close() failed: %d", res);
     return res;
   }
 
@@ -57,7 +58,7 @@ static int do_v4l2InputSetFormat(V4L2Input* _v4l2, size_t _width, size_t _height
   if (ioctl(_v4l2->m_fd, VIDIOC_S_STD, &stdid) != 0)
   {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_S_STD) failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_S_STD) failed: %d", res);
     return res;
   }
 #endif
@@ -70,11 +71,11 @@ static int do_v4l2InputSetFormat(V4L2Input* _v4l2, size_t _width, size_t _height
   _v4l2->m_imageFormat.fmt.pix.field = V4L2_FIELD_NONE;
 
   if (ioctl(_v4l2->m_fd, VIDIOC_TRY_FMT, &_v4l2->m_imageFormat) != 0)
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_TRY_FMT) failed: %d\n", errno);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_TRY_FMT) failed: %d", errno);
 
   if (ioctl(_v4l2->m_fd, VIDIOC_S_FMT, &_v4l2->m_imageFormat) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_S_FMT) failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_S_FMT) failed: %d", res);
     return res;
   }
 
@@ -88,13 +89,13 @@ static int do_v4l2InputSetFormat(V4L2Input* _v4l2, size_t _width, size_t _height
     fmtDesc.type = _v4l2->m_imageFormat.type;
     if (ioctl(_v4l2->m_fd, VIDIOC_ENUM_FMT, &fmtDesc) != 0) {
       // either fault or unknown format
-      fprintf(stderr, "v4l2_ioctl(VIDIOC_ENUM_FMT) failed: %d\n", errno);
+      LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_ENUM_FMT) failed: %d", errno);
       break; // just warn, do not fail
     }
 
     if (fmtDesc.pixelformat == _v4l2->m_imageFormat.fmt.pix.pixelformat) {
       if (fmtDesc.flags & V4L2_FMT_FLAG_EMULATED)
-        fprintf(stderr, "V4L2 format %c%c%c%c is emulated, performance will be degraded\n", (_v4l2->m_imageFormat.fmt.pix.pixelformat) & 0xff,
+        LOG(LOG_ERROR, "V4L2 format %c%c%c%c is emulated, performance will be degraded", (_v4l2->m_imageFormat.fmt.pix.pixelformat) & 0xff,
           (_v4l2->m_imageFormat.fmt.pix.pixelformat >> 8) & 0xff, (_v4l2->m_imageFormat.fmt.pix.pixelformat >> 16) & 0xff,
           (_v4l2->m_imageFormat.fmt.pix.pixelformat >> 24) & 0xff);
       break;
@@ -141,19 +142,19 @@ static int do_v4l2InputMmapBuffers(V4L2Input* _v4l2) {
 
   if (ioctl(_v4l2->m_fd, VIDIOC_REQBUFS, &requestBuffers) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_REQBUFS) failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_REQBUFS) failed: %d", res);
     goto exit;
   }
 
   if (requestBuffers.count <= 0) {
     res = ENOSPC;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_REQBUFS) returned no buffers\n");
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_REQBUFS) returned no buffers");
     goto exit;
   } else if (requestBuffers.count < sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers))
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_REQBUFS) returned only %" PRIu32 " buffers of %zu requested\n", requestBuffers.count,
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_REQBUFS) returned only %" PRIu32 " buffers of %zu requested", requestBuffers.count,
       sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers));
   else if (requestBuffers.count > sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers)) {
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_REQBUFS) returned %" PRIu32 " buffers, used only %zu\n", requestBuffers.count,
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_REQBUFS) returned %" PRIu32 " buffers, used only %zu", requestBuffers.count,
       sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers));
     requestBuffers.count = sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers);
   }
@@ -168,7 +169,7 @@ static int do_v4l2InputMmapBuffers(V4L2Input* _v4l2) {
 
     if (ioctl(_v4l2->m_fd, VIDIOC_QUERYBUF, &buffer) != 0) {
       res = errno;
-      fprintf(stderr, "v4l2_ioctl(VIDIOC_QUERYBUF, index %zu) failed: %d\n", bufferIndex, res);
+      LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_QUERYBUF, index %zu) failed: %d", bufferIndex, res);
       goto exit_unmap;
     }
 
@@ -176,7 +177,7 @@ static int do_v4l2InputMmapBuffers(V4L2Input* _v4l2) {
     _v4l2->m_buffers[bufferIndex] = mmap(NULL, buffer.length, PROT_READ | PROT_WRITE, MAP_SHARED, _v4l2->m_fd, buffer.m.offset);
     if (_v4l2->m_buffers[bufferIndex] == MAP_FAILED) {
       res = errno;
-      fprintf(stderr, "v4l2_mmap(index %zu, size %" PRIu32 ", offset %" PRIu32 ") failed: %d\n", bufferIndex, buffer.length, buffer.m.offset, res);
+      LOG(LOG_ERROR, "v4l2_mmap(index %zu, size %" PRIu32 ", offset %" PRIu32 ") failed: %d", bufferIndex, buffer.length, buffer.m.offset, res);
       goto exit_unmap;
     }
   }
@@ -193,7 +194,7 @@ exit_unmap:
   for (idx = 0; idx < bufferIndex; ++idx)
     if (munmap(_v4l2->m_buffers[idx], _v4l2->m_bufferSize[idx]) != 0)
       // do not update res!
-      fprintf(stderr, "v4l2_munmap(index %zu, ptr %p, size %zu) failed: %d\n", idx, _v4l2->m_buffers[idx], _v4l2->m_bufferSize[idx], errno);
+      LOG(LOG_ERROR, "v4l2_munmap(index %zu, ptr %p, size %zu) failed: %d", idx, _v4l2->m_buffers[idx], _v4l2->m_bufferSize[idx], errno);
 
 exit:
   return res;
@@ -210,7 +211,7 @@ static int do_v4l2InputMunmapBuffers(V4L2Input* _v4l2) {
   for (bufferIndex = 0; bufferIndex < sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers); ++bufferIndex) {
     if (_v4l2->m_buffers[bufferIndex] != MAP_FAILED && munmap(_v4l2->m_buffers[bufferIndex], _v4l2->m_bufferSize[bufferIndex]) != 0) {
       res = errno; // last error will be returned
-      fprintf(stderr, "v4l2_munmap(index %zu, ptr %p, size %zu) failed: %d\n", bufferIndex, _v4l2->m_buffers[bufferIndex], _v4l2->m_bufferSize[bufferIndex],
+      LOG(LOG_ERROR, "v4l2_munmap(index %zu, ptr %p, size %zu) failed: %d", bufferIndex, _v4l2->m_buffers[bufferIndex], _v4l2->m_bufferSize[bufferIndex],
         res);
     }
     _v4l2->m_buffers[bufferIndex] = MAP_FAILED;
@@ -238,7 +239,7 @@ static int do_v4l2InputStart(V4L2Input* _v4l2) {
 
       if (ioctl(_v4l2->m_fd, VIDIOC_QBUF, &buffer) != 0) {
         res = errno;
-        fprintf(stderr, "v4l2_ioctl(VIDIOC_QBUF, index %zu) failed: %d\n", bufferIndex, res);
+        LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_QBUF, index %zu) failed: %d", bufferIndex, res);
         goto exit_stop;
       }
     }
@@ -248,7 +249,7 @@ static int do_v4l2InputStart(V4L2Input* _v4l2) {
   enum v4l2_buf_type capture = _v4l2->m_imageFormat.type;
   if (ioctl(_v4l2->m_fd, VIDIOC_STREAMON, &capture) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_STREAMON) failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_STREAMON) failed: %d", res);
     goto exit_stop;
   }
 
@@ -258,7 +259,7 @@ exit_stop:
   capture = _v4l2->m_imageFormat.type;
   if (ioctl(_v4l2->m_fd, VIDIOC_STREAMOFF, &capture) != 0)
     // do not update res!
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_STREAMOFF) failed: %d\n", errno);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_STREAMOFF) failed: %d", errno);
 
   // exit:
   return res;
@@ -276,7 +277,7 @@ static int do_v4l2InputStop(V4L2Input* _v4l2) {
   enum v4l2_buf_type capture = _v4l2->m_imageFormat.type;
   if (ioctl(_v4l2->m_fd, VIDIOC_STREAMOFF, &capture) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_STREAMOFF) failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_STREAMOFF) failed: %d", res);
     return res;
   }
 
@@ -297,13 +298,13 @@ static int do_v4l2InputGetFrame(V4L2Input* _v4l2, const void** _framePtr, size_t
 
   if (ioctl(_v4l2->m_fd, VIDIOC_DQBUF, &buffer) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_DQBUF) failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_DQBUF) failed: %d", res);
     return res;
   }
 
   if (buffer.index >= sizeof(_v4l2->m_buffers) / sizeof(*_v4l2->m_buffers) || _v4l2->m_buffers[buffer.index] == MAP_FAILED) {
     res = ECHRNG;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_DQBUF) returned invalid buffer index %" PRIu32 "\n", buffer.index);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_DQBUF) returned invalid buffer index %" PRIu32 "", buffer.index);
     return res;
   }
 
@@ -334,7 +335,7 @@ static int do_v4l2InputPutFrame(V4L2Input* _v4l2, size_t _frameIndex) {
 
   if (ioctl(_v4l2->m_fd, VIDIOC_QBUF, &buffer) != 0) {
     res = errno;
-    fprintf(stderr, "v4l2_ioctl(VIDIOC_QBUF, index %zu) failed: %d\n", _frameIndex, res);
+    LOG(LOG_ERROR, "v4l2_ioctl(VIDIOC_QBUF, index %zu) failed: %d", _frameIndex, res);
     return res;
   }
 
@@ -347,14 +348,14 @@ int do_v4l2InputReportFPS(V4L2Input* _v4l2, long long _ms) {
 
   if (_ms > 0) {
     long long kfps = (frames * 1000 * 1000) / _ms;
-    fprintf(stderr, "V4L2 processing %llu.%03llu fps\n", kfps / 1000, kfps % 1000);
+    LOG(LOG_ERROR, "V4L2 processing %llu.%03llu fps", kfps / 1000, kfps % 1000);
   } else
-    fprintf(stderr, "V4L2 processed %llu frames\n", frames);
+    LOG(LOG_ERROR, "V4L2 processed %llu frames", frames);
 
   return 0;
 }
 
-int v4l2InputInit(bool _verbose) { return 0; }
+int v4l2InputInit(void) { return 0; }
 
 int v4l2InputFini() { return 0; }
 

@@ -8,11 +8,12 @@
 
 #include "trik/sensors/arm_server.h"
 #include "trik/sensors/cv_algorithm_args.h"
+#include "trik/sensors/log.h"
 #include "trik/sensors/runtime.h"
 #include "trik/sensors/thread_input.h"
 #include "trik/sensors/thread_video.h"
 
-static const RuntimeConfig s_runtimeConfig = { .m_verbose = false, 
+static const RuntimeConfig s_runtimeConfig = {
   .m_configFile = NULL,
   .m_v4l2Config = { NULL, 320, 240, V4L2_PIX_FMT_NV16 },
   .m_fbConfig = { "/dev/fb0" },
@@ -60,7 +61,7 @@ bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
   int longopt;
   RuntimeConfig* cfg;
 
-  static const char* s_optstring = "vh";
+  static const char* s_optstring = "h";
   static const struct option s_longopts[] = { 
     { "v4l2-path", 1, NULL, 0 },  //0                                               
     { "v4l2-width", 1, NULL, 0 }, 
@@ -74,7 +75,7 @@ bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
     { "config-file", 1, NULL, 0 }, 
     { "mxn-width-m", 1, NULL, 0 }, //10
     { "mxn-height-n", 1, NULL, 0 },             
-    { "verbose", 0, NULL, 'v' }, //12
+    { "log-level", 1, NULL, 0 }, //12
     { "help", 0, NULL, 'h' }, 
        { NULL, 0, NULL, 0 } };
 
@@ -85,10 +86,6 @@ bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
 
   while ((opt = getopt_long(_argc, _argv, s_optstring, s_longopts, &longopt)) != -1) {
     switch (opt) {
-    case 'v':
-      cfg->m_verbose = true;
-      break;
-
     case 0:
       switch (longopt) {
       case 0:
@@ -116,9 +113,9 @@ bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
         else if (!strcasecmp(optarg, "nv16"))
           cfg->m_v4l2Config.m_format = V4L2_PIX_FMT_NV16;
         else {
-          fprintf(stderr,
+          LOG(LOG_ERROR,
             "Unknown v4l2 format '%s'\n"
-            "Known formats: rgb888, rgb565, rgb565x, yuv444, yuv422, yuv422p, nv16\n",
+            "Known formats: rgb888, rgb565, rgb565x, yuv444, yuv422, yuv422p, nv16",
             optarg);
           return false;
         }
@@ -149,6 +146,20 @@ bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
       case 11:
         cfg->m_rcConfig.m_extraParams.m_mxnParams.m_n = atoi(optarg);
         break;
+      case 12:
+        if (strcmp(optarg, "debug") == 0)
+          g_log_level = LOG_DEBUG;
+        else if (strcmp(optarg, "info") == 0)
+          g_log_level = LOG_INFO;
+        else if (strcmp(optarg, "warn") == 0)
+          g_log_level = LOG_WARN;
+        else if (strcmp(optarg, "error") == 0)
+          g_log_level = LOG_ERROR;
+        else {
+          LOG(LOG_ERROR, "Unknown log-level '%s', expected error|warn|info|debug", optarg);
+          return false;
+        }
+        break;
       default:
         return false;
       }
@@ -161,26 +172,26 @@ bool runtimeParseArgs(Runtime* _runtime, int _argc, char* const _argv[]) {
   }
 
   if (cfg->m_v4l2Config.m_path == NULL) {
-    fprintf(stderr, "Missing required argument: --v4l2-path\n");
+    LOG(LOG_ERROR, "Missing required argument: --v4l2-path");
     return false;
   }
   if (cfg->m_rcConfig.m_fifoInput == NULL) {
-    fprintf(stderr, "Missing required argument: --rc-fifo-in\n");
+    LOG(LOG_ERROR, "Missing required argument: --rc-fifo-in");
     return false;
   }
   if (cfg->m_rcConfig.m_fifoOutput == NULL) {
-    fprintf(stderr, "Missing required argument: --rc-fifo-out\n");
+    LOG(LOG_ERROR, "Missing required argument: --rc-fifo-out");
     return false;
   }
   if (cfg->m_rcConfig.m_sensorType < 0) {
-    fprintf(stderr, "Missing required argument: --sensor-type\n");
+    LOG(LOG_ERROR, "Missing required argument: --sensor-type");
     return false;
   }
 
   if (cfg->m_rcConfig.m_sensorType == TRIK_CV_ALGORITHM_MXN_SENSOR) {
     if (cfg->m_rcConfig.m_extraParams.m_mxnParams.m_m <= 0 
         && cfg->m_rcConfig.m_extraParams.m_mxnParams.m_n <= 0) {
-      fprintf(stderr, "Missing or invalid required argument: mxn-width-m or mxn-height-n\n");
+      LOG(LOG_ERROR, "Missing or invalid required argument: mxn-width-m or mxn-height-n");
       return false;
     }
   }
@@ -192,7 +203,7 @@ void runtimeArgsHelpMessage(Runtime* _runtime, const char* _arg0) {
   if (_runtime == NULL)
     return;
 
-  fprintf(stderr,
+  LOG(LOG_ERROR,
     "Usage:\n"
     "    %s <opts>\n"
     " where opts are:\n"
@@ -205,36 +216,33 @@ void runtimeArgsHelpMessage(Runtime* _runtime, const char* _arg0) {
     "   --rc-fifo-out           <remote-control-fifo-output>\n"
     "   --video-out             <enable-video-output>\n"
     "   --sensor-type             <type-of-sensor-algo>\n"
-    "   --help\n",
+    "   --log-level              <error|warn|info|debug>\n"
+    "   --help",
     _arg0);
 }
 
 int runtimeInit(Runtime* _runtime) {
   int res = 0;
-  int exit_code = 0;
-  bool verbose;
 
   if (_runtime == NULL)
     return EINVAL;
 
-  verbose = runtimeCfgVerbose(_runtime);
-
-  if ((res = v4l2InputInit(verbose)) != 0) {
-    fprintf(stderr, "v4l2InputInit() failed: %d\n", res);
-    exit_code = res;
+  if ((res = v4l2InputInit()) != 0) {
+    LOG(LOG_ERROR, "v4l2InputInit() failed: %d", res);
+    return res;
   }
 
-  if ((res = fbOutputInit(verbose)) != 0) {
-    fprintf(stderr, "fbOutputInit() failed: %d\n", res);
-    exit_code = res;
+  if ((res = fbOutputInit()) != 0) {
+    LOG(LOG_ERROR, "fbOutputInit() failed: %d", res);
+    return res;
   }
 
-  if ((res = rcInputInit(verbose)) != 0) {
-    fprintf(stderr, "rcInputInit() failed: %d\n", res);
-    exit_code = res;
+  if ((res = rcInputInit()) != 0) {
+    LOG(LOG_ERROR, "rcInputInit() failed: %d", res);
+    return res;
   }
 
-  return exit_code;
+  return 0;
 }
 
 int runtimeFini(Runtime* _runtime) {
@@ -244,13 +252,13 @@ int runtimeFini(Runtime* _runtime) {
     return EINVAL;
 
   if ((res = rcInputFini()) != 0)
-    fprintf(stderr, "rcInputFini() failed: %d\n", res);
+    LOG(LOG_ERROR, "rcInputFini() failed: %d", res);
 
   if ((res = fbOutputFini()) != 0)
-    fprintf(stderr, "fbOutputFini() failed: %d\n", res);
+    LOG(LOG_ERROR, "fbOutputFini() failed: %d", res);
 
   if ((res = v4l2InputFini()) != 0)
-    fprintf(stderr, "v4l2InputFini() failed: %d\n", res);
+    LOG(LOG_ERROR, "v4l2InputFini() failed: %d", res);
 
   return 0;
 }
@@ -267,13 +275,13 @@ int runtimeStart(Runtime* _runtime) {
   rt->m_terminate = false;
 
   if ((res = pthread_create(&rt->m_inputThread, NULL, &threadInput, _runtime)) != 0) {
-    fprintf(stderr, "pthread_create(input) failed: %d\n", res);
+    LOG(LOG_ERROR, "pthread_create(input) failed: %d", res);
     exit_code = res;
     goto exit;
   }
 
   if ((res = pthread_create(&rt->m_videoThread, NULL, &trik_start_arm_server, _runtime)) != 0) {
-    fprintf(stderr, "pthread_create(arm  server) failed: %d\n", res);
+    LOG(LOG_ERROR, "pthread_create(arm  server) failed: %d", res);
     exit_code = res;
     goto exit_join_input_thread;
   }
@@ -302,13 +310,6 @@ int runtimeStop(Runtime* _runtime) {
   pthread_join(rt->m_inputThread, NULL);
 
   return 0;
-}
-
-bool runtimeCfgVerbose(const Runtime* _runtime) {
-  if (_runtime == NULL)
-    return false;
-
-  return _runtime->m_config.m_verbose;
 }
 
 const V4L2Config* runtimeCfgV4L2Input(const Runtime* _runtime) {

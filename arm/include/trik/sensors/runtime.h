@@ -13,7 +13,6 @@ extern "C" {
 #endif // __cplusplus
 
 typedef struct RuntimeConfig {
-  bool m_verbose;
   const char* m_configFile;
 
   V4L2Config m_v4l2Config;
@@ -68,7 +67,6 @@ int runtimeFini(Runtime* _runtime);
 int runtimeStart(Runtime* _runtime);
 int runtimeStop(Runtime* _runtime);
 
-bool runtimeCfgVerbose(const Runtime* _runtime);
 const V4L2Config* runtimeCfgV4L2Input(const Runtime* _runtime);
 const FBConfig* runtimeCfgFBOutput(const Runtime* _runtime);
 const RCConfig* runtimeCfgRCInput(const Runtime* _runtime);

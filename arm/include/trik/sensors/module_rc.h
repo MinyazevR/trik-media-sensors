@@ -55,7 +55,7 @@ typedef struct RCInput {
   } m_extraRCInput;
 } RCInput;
 
-int rcInputInit(bool _verbose);
+int rcInputInit(void);
 int rcInputFini();
 
 int rcInputOpen(RCInput* _rc, const RCConfig* _config);

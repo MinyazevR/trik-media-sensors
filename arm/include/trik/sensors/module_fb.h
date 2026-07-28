@@ -24,7 +24,7 @@ typedef struct FBOutput {
   size_t m_fbSize;
 } FBOutput;
 
-int fbOutputInit(bool _verbose);
+int fbOutputInit(void);
 int fbOutputFini();
 
 int fbOutputOpen(FBOutput* _fb, const FBConfig* _config);

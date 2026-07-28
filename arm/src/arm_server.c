@@ -71,14 +71,13 @@ static int trik_init_rpmsg(uint16_t rproc_id) {
   Module.slaveQue = MessageQ_INVALIDMESSAGEQ;
   Module.heapId = TRIK_MSG_HEAP_ID;
   Module.msgSize = TRIK_MSG_SIZE /* sizeof(struct trik_msg) */;
-  printf("MessageQ_Params_init\n");
-
+  LOG(LOG_DEBUG, "MessageQ_Params_init");
   MessageQ_Params_init(&msgqParams);
-  printf("MessageQ_create\n");
+  LOG(LOG_DEBUG, "MessageQ_create");
   Module.hostQue = MessageQ_create(TRIK_HOST_MSG_QUE_NAME, &msgqParams);
 
   if (Module.hostQue == NULL) {
-    errorf("failed creating MessageQ");
+    LOG(LOG_ERROR, "failed creating MessageQ");
     return -1;
   }
 
@@ -90,7 +89,7 @@ static int trik_init_rpmsg(uint16_t rproc_id) {
   } while (status == MessageQ_E_NOTFOUND);
 
   if (status < 0) {
-    errorf("failed opening MessageQ");
+    LOG(LOG_ERROR, "failed opening MessageQ");
     return -1;
   }
   return 0;
@@ -122,7 +121,7 @@ static int trik_send_msg(struct trik_msg* msg) {
   if (MessageQ_put(Module.slaveQue, (MessageQ_Msg) msg) < 0)
     return -1;
 
-  debugf("sent 0x%x", ((struct trik_msg*) msg)->cmd);
+  LOG(LOG_DEBUG, "sent 0x%x", ((struct trik_msg*) msg)->cmd);
   return 0;
 }
 
@@ -139,7 +138,7 @@ static int trik_send_cmd(enum trik_cmd cmd) {
 static int trik_wait_for_msg(struct trik_msg** msg) {
   if (MessageQ_get(Module.hostQue, (MessageQ_Msg*) msg, MessageQ_FOREVER) < 0)
     return -1;
-  debugf("got 0x%x", (*msg)->cmd);
+  LOG(LOG_DEBUG, "got 0x%x", (*msg)->cmd);
   return 0;
 }
 
@@ -233,7 +232,7 @@ int trik_req_cv_algorithm(RuntimeConfig r_config, uint32_t line_length) {
   req->line_length = line_length;
 
   if (!req->video_format) {
-    errorf("unknown video format, check if we support formats other than yuyv422 and nv16");
+    LOG(LOG_ERROR, "unknown video format, check if we support formats other than yuyv422 and nv16");
     return -1;
   }
 
@@ -308,17 +307,17 @@ static int trik_setup_display(int8_t** fbp, unsigned int* fb_len) {
 
   fbfd = open("/dev/fb0", O_RDWR);
   if (fbfd == -1) {
-    errorf("cannot open framebuffer device");
+    LOG(LOG_ERROR, "cannot open framebuffer device");
     return -1;
   }
 
   if (ioctl(fbfd, FBIOGET_FSCREENINFO, &finfo) == -1) {
-    errorf("failed to read fixed information");
+    LOG(LOG_ERROR, "failed to read fixed information");
     return -1;
   }
 
   if (ioctl(fbfd, FBIOGET_VSCREENINFO, &vinfo) == -1) {
-    errorf("failed to read variable information");
+    LOG(LOG_ERROR, "failed to read variable information");
     return -1;
   }
 
@@ -330,19 +329,19 @@ static int trik_setup_display(int8_t** fbp, unsigned int* fb_len) {
 
 int trik_init_arm_server(uint16_t rproc_id) {
   if (trik_init_rpmsg(rproc_id) < 0) {
-    errorf("failed to initialize rpmsg");
+    LOG(LOG_ERROR, "failed to initialize rpmsg");
     return -1;
   }
 
-  debugf("Initalized arm server");
+  LOG(LOG_DEBUG, "Initalized arm server");
   return 0;
 }
 
 int trik_destroy_arm_server(void) {
   if (trik_destroy_rpmsg() < 0)
-    warnf("failed disabling rpmsg");
+    LOG(LOG_WARN, "failed disabling rpmsg");
 
-  debugf("destroyed arm server");
+  LOG(LOG_DEBUG, "destroyed arm server");
   return 0;
 }
 
@@ -350,34 +349,34 @@ void* trik_start_arm_server(void* _arg) {
   int res = 0;
   intptr_t exit_code = 0;
   Runtime* runtime = (Runtime*) _arg;
-  debugf("starting arm server");
+  LOG(LOG_DEBUG, "starting arm server");
 
   struct buffer dsp_in_buf;
   struct buffer dsp_out_buf;
   if (runtime->m_config.m_configFile) {
     if (trik_read_cv_algorithm_in_args_from_file(runtime->m_config.m_configFile, &(runtime->m_state.m_targetDetectParams)) < 0)
-      warnf("failed to read config from '%s', using fallback", runtime->m_config.m_configFile);
+      LOG(LOG_WARN, "failed to read config from '%s', using fallback", runtime->m_config.m_configFile);
     else
-      debugf("sucessfully loaded config file '%s'", runtime->m_config.m_configFile);
+      LOG(LOG_DEBUG, "sucessfully loaded config file '%s'", runtime->m_config.m_configFile);
   }
   if ((res = trik_req_init(&dsp_in_buf, &dsp_out_buf)) < 0) {
-    errorf("failed to recieve image buffer %d", res);
+    LOG(LOG_ERROR, "failed to recieve image buffer %d", res);
     exit_code = res;
     goto destroy_arm_server;
   }
-  debugf("successully recieved image bufs");
+  LOG(LOG_DEBUG, "successully recieved image bufs");
   runtime->m_modules.m_dsp.dsp_in_buf = &dsp_in_buf;
   runtime->m_modules.m_dsp.dsp_out_buf = &dsp_out_buf;
 
   if ((res = threadVideo(runtime)) != 0) {
-    errorf("failed to threadVideo %d", res);
+    LOG(LOG_ERROR, "failed to threadVideo %d", res);
     exit_code = res;
     goto destroy_arm_server;
   }
 
 destroy_arm_server:
   if ((res = trik_destroy_arm_server()) < 0) {
-    errorf("failed to destroy arm server");
+    LOG(LOG_ERROR, "failed to destroy arm server");
     exit_code = res;
   }
 

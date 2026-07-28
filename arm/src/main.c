@@ -17,7 +17,10 @@
 #include <trik/sensors/arm_server.h>
 #include <trik/sensors/cmd.h>
 #include <trik/sensors/cv_algorithm.h>
+#include <trik/sensors/log.h>
 #include <trik/sensors/msg.h>
+
+log_level_t g_log_level = LOG_ERROR;
 
 static sig_atomic_t s_signalTerminate = false;
 
@@ -35,11 +38,11 @@ static int sigactions_setup() {
   action.sa_flags = SA_SIGINFO | SA_RESTART;
 
   if (sigaction(SIGTERM, &action, NULL) != 0) {
-    fprintf(stderr, "sigaction(SIGTERM) failed: %d\n", errno);
+    LOG(LOG_ERROR, "sigaction(SIGTERM) failed: %d", errno);
     return -1;
   }
   if (sigaction(SIGINT, &action, NULL) != 0) {
-    fprintf(stderr, "sigaction(SIGINT) failed: %d\n", errno);
+    LOG(LOG_ERROR, "sigaction(SIGINT) failed: %d", errno);
     return -1;
   }
 
@@ -62,19 +65,19 @@ int main(int _argc, char* const _argv[]) {
   }
 
   if ((res = runtimeInit(&runtime)) != 0) {
-    fprintf(stderr, "runtimeInit() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeInit() failed: %d", res);
     exit_code = EX_SOFTWARE;
     goto exit;
   }
 
   if ((res = Ipc_transportConfig(&TransportRpmsg_Factory)) != 0) {
-    fprintf(stderr, "Ipc_transportConfig failed: status = %d\n", res);
+    LOG(LOG_ERROR, "Ipc_transportConfig failed: status = %d", res);
     exit_code = EX_SOFTWARE;
     goto exit;
   }
 
   if ((res = Ipc_start()) < 0) {
-    fprintf(stderr, "Ipc_start failed: status = %d\n", res);
+    LOG(LOG_ERROR, "Ipc_start failed: status = %d", res);
     exit_code = EX_SOFTWARE;
     goto exit;
   }
@@ -84,19 +87,19 @@ int main(int _argc, char* const _argv[]) {
   rproc_id = MultiProc_getId("DSP");
 
   if ((res = trik_init_arm_server(rproc_id)) < 0) {
-    printf("main(): failed to initialize trik arm server: %d\n", res);
+    LOG(LOG_ERROR, "main(): failed to initialize trik arm server: %d", res);
     exit_code = EX_SOFTWARE;
     goto exit_ipc_stop;
   }
 
   if ((res = sigactions_setup()) != 0) {
-    fprintf(stderr, "sigactions_setup failed: %d\n", res);
+    LOG(LOG_ERROR, "sigactions_setup failed: %d", res);
     exit_code = EX_SOFTWARE;
     goto exit_ipc_stop;
   }
 
   if ((res = runtimeStart(&runtime)) != 0) {
-    fprintf(stderr, "runtimeStart failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeStart failed: %d", res);
     exit_code = EX_SOFTWARE;
     goto exit_ipc_stop;
   }
@@ -107,18 +110,18 @@ int main(int _argc, char* const _argv[]) {
 
 exit_runtime_stop:
   if ((res = runtimeStop(&runtime)) != 0) {
-    fprintf(stderr, "runtimeStop() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeStop() failed: %d", res);
     exit_code = EX_SOFTWARE;
   }
 exit_fini:
   if ((res = runtimeFini(&runtime)) != 0) {
-    fprintf(stderr, "runtimeStop() failed: %d\n", res);
+    LOG(LOG_ERROR, "runtimeStop() failed: %d", res);
     exit_code = EX_SOFTWARE;
   }
 
 exit_ipc_stop:
   if ((res = Ipc_stop()) < 0) {
-    printf("Ipc_stop failed: status = %d\n", res);
+    LOG(LOG_ERROR, "Ipc_stop failed: status = %d", res);
     exit_code = EX_SOFTWARE;
   }
 

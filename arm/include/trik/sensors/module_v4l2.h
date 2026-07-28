@@ -27,7 +27,7 @@ typedef struct V4L2Input {
   size_t m_bufferSize[3];
 } V4L2Input;
 
-int v4l2InputInit(bool _verbose);
+int v4l2InputInit(void);
 int v4l2InputFini();
 
 int v4l2InputOpen(V4L2Input* _v4l2, const V4L2Config* _config);
