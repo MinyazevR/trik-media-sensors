@@ -7,28 +7,25 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <linux/fb.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+
+#include <linux/videodev2.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
 #include <ti/ipc/Std.h>
-/* package header files */
 #include <ti/ipc/Ipc.h>
 #include <ti/ipc/MessageQ.h>
+#include <ti/ipc/MultiProc.h>
 #include <ti/ipc/transports/TransportRpmsg.h>
 
-#include <ti/ipc/MultiProc.h>
 #include <trik/buffer.h>
 #include <trik/sensors/cmd.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/log.h>
 #include <trik/sensors/msg.h>
-#include <trik/sensors/runtime.h>
-#include <trik/sensors/thread_input.h>
-#include <trik/sensors/thread_video.h>
 #include <trik/sensors/video_format.h>
 
 #include <time.h>
@@ -158,21 +155,6 @@ static int trik_wait_for_cmd(enum trik_cmd cmd) {
   return 0;
 }
 
-static int trik_fill_pipeline() {
-  for (int i = 0; i < 3; i++)
-    if (trik_send_cmd(TRIK_CMD_NOP) < 0)
-      return -1;
-  return 0;
-}
-
-static int trik_drain_pipeline() {
-  int count = MessageQ_count(Module.hostQue);
-  for (int i = 0; i < count; i++)
-    if (trik_wait_for_cmd(TRIK_CMD_NOP) < 0)
-      return -1;
-  return 0;
-}
-
 static int8_t* trik_get_ptr_for_phys_addr(void* addr) {
   uint32_t page_base = ((uint32_t) addr) / PAGE_SIZE * PAGE_SIZE;
   uint32_t page_offset = ((uint32_t) addr) - page_base;
@@ -222,29 +204,6 @@ static enum VideoFormat trik_get_video_format(uint32_t video_format) {
 }
 
 
-int trik_req_cv_algorithm(RuntimeConfig r_config, uint32_t line_length) {
-  enum trik_cmd cmd = trik_cmd_from_cv_algorithm(r_config.m_rcConfig.m_sensorType);
-  if (cmd == TRIK_CMD_NOP)
-    return -1;
-
-  struct trik_req_cv_algorithm_msg* req = (struct trik_req_cv_algorithm_msg*) trik_create_msg(cmd);
-
-  req->video_format = trik_get_video_format(r_config.m_v4l2Config.m_format);
-  req->line_length = line_length;
-
-  if (!req->video_format) {
-    errorf("unknown video format, check if we support formats other than yuyv422 and nv16");
-    return -1;
-  }
-
-  if (trik_send_msg((struct trik_msg*) req) < 0)
-    return -1;
-
-  if (trik_wait_for_cmd(cmd) < 0)
-    return -1;
-  return 0;
-}
-
 int trik_req_step(struct trik_cv_algorithm_out_args* out_args, struct trik_cv_algorithm_in_args in_args) {
   struct trik_res_step_msg* req = (struct trik_res_step_msg*) trik_create_msg(TRIK_CMD_STEP);
   // if (trik_send_cmd(TRIK_CMD_STEP) < 0)
@@ -261,70 +220,6 @@ int trik_req_step(struct trik_cv_algorithm_out_args* out_args, struct trik_cv_al
   *out_args = res->out_args;
 
   trik_destroy_msg(res);
-  return 0;
-}
-
-static int trik_read_cv_algorithm_in_args_from_file(const char* filename, struct trik_cv_algorithm_in_args* in_args) {
-  FILE* f = fopen(filename, "r");
-
-  if (f == NULL) {
-    return -1;
-  } 
-
-  char param[32];
-  int32_t value;
-
-  while (fscanf(f, "%s = %d", param, &value) > 0)
-    if (strcmp(param, "detect_hue_from") == 0)
-      in_args->detect_hue_from = value;
-    else if (strcmp(param, "detect_hue_to") == 0)
-      in_args->detect_hue_to = value;
-    else if (strcmp(param, "detect_sat_from") == 0)
-      in_args->detect_sat_from = value;
-    else if (strcmp(param, "detect_sat_to") == 0)
-      in_args->detect_sat_to = value;
-    else if (strcmp(param, "detect_val_from") == 0)
-      in_args->detect_val_from = value;
-    else if (strcmp(param, "detect_val_to") == 0)
-      in_args->detect_val_to = value;
-    else if (strcmp(param, "auto_detect_hsv") == 0)
-      in_args->auto_detect_hsv = value;
-    else if (strcmp(param, "width_m") == 0)
-      in_args->extra_inArgs.mxnParams.m_m = value;
-    else if (strcmp(param, "height_n") == 0)
-      in_args->extra_inArgs.mxnParams.m_n = value;
-
-  fclose(f);
-  return 0;
-}
-
-static int trik_setup_display(int8_t** fbp, unsigned int* fb_len) {
-  int fbfd = 0;
-  struct fb_var_screeninfo vinfo;
-  struct fb_fix_screeninfo finfo;
-  long int screensize = 0;
-
-  *fbp = NULL;
-
-  fbfd = open("/dev/fb0", O_RDWR);
-  if (fbfd == -1) {
-    errorf("cannot open framebuffer device");
-    return -1;
-  }
-
-  if (ioctl(fbfd, FBIOGET_FSCREENINFO, &finfo) == -1) {
-    errorf("failed to read fixed information");
-    return -1;
-  }
-
-  if (ioctl(fbfd, FBIOGET_VSCREENINFO, &vinfo) == -1) {
-    errorf("failed to read variable information");
-    return -1;
-  }
-
-  screensize = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
-  *fb_len = finfo.smem_len;
-  *fbp = (int8_t*) mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
   return 0;
 }
 
@@ -346,40 +241,32 @@ int trik_destroy_arm_server(void) {
   return 0;
 }
 
-void* trik_start_arm_server(void* _arg) {
-  int res = 0;
-  intptr_t exit_code = 0;
-  Runtime* runtime = (Runtime*) _arg;
-  debugf("starting arm server");
+int trik_dsp_init_buffer(struct buffer* in, struct buffer* out)
+{
+  return trik_req_init(in, out);
+}
 
-  struct buffer dsp_in_buf;
-  struct buffer dsp_out_buf;
-  if (runtime->m_config.m_configFile) {
-    if (trik_read_cv_algorithm_in_args_from_file(runtime->m_config.m_configFile, &(runtime->m_state.m_targetDetectParams)) < 0)
-      warnf("failed to read config from '%s', using fallback", runtime->m_config.m_configFile);
-    else
-      debugf("sucessfully loaded config file '%s'", runtime->m_config.m_configFile);
-  }
-  if ((res = trik_req_init(&dsp_in_buf, &dsp_out_buf)) < 0) {
-    errorf("failed to recieve image buffer %d", res);
-    exit_code = res;
-    goto destroy_arm_server;
-  }
-  debugf("successully recieved image bufs");
-  runtime->m_modules.m_dsp.dsp_in_buf = &dsp_in_buf;
-  runtime->m_modules.m_dsp.dsp_out_buf = &dsp_out_buf;
+int trik_dsp_register_algo(enum trik_cv_algorithm algo, uint32_t v4l2_fmt, uint32_t line_len)
+{
+  enum trik_cmd cmd = trik_cmd_from_cv_algorithm(algo);
+  if (cmd == TRIK_CMD_NOP)
+    return -1;
 
-  if ((res = threadVideo(runtime)) != 0) {
-    errorf("failed to threadVideo %d", res);
-    exit_code = res;
-    goto destroy_arm_server;
+  struct trik_req_cv_algorithm_msg* req =
+    (struct trik_req_cv_algorithm_msg*) trik_create_msg(cmd);
+
+  req->video_format = trik_get_video_format(v4l2_fmt);
+  req->line_length = line_len;
+
+  if (!req->video_format) {
+    debugf("unknown video format 0x%x", v4l2_fmt);
+    return -1;
   }
 
-destroy_arm_server:
-  if ((res = trik_destroy_arm_server()) < 0) {
-    errorf("failed to destroy arm server");
-    exit_code = res;
-  }
+  if (trik_send_msg((struct trik_msg*) req) < 0)
+    return -1;
 
-  return (void*) exit_code;
+  if (trik_wait_for_cmd(cmd) < 0)
+    return -1;
+  return 0;
 }

@@ -1,4 +1,5 @@
 #line-sensor-webcam default opts
 VIDEO_PORT=2
-VIDEO_PATH=/dev/video$VIDEO_PORT
-DEFAULT_OPS='--v4l2-path=$VIDEO_PATH --v4l2-format=yuv422 --v4l2-width=320 --v4l2-height=240 --sensor-type=line_sensor --rc-fifo-in=/run/line-sensor.in.fifo --rc-fifo-out=/run/line-sensor.out.fifo'
+CAM_ID=1
+ENABLE_CMD="enable 1 line_sensor /run/cam1-line.in.fifo /run/cam1-line.out.fifo"
+UNBIND_CMD="unbind 1 line_sensor"
