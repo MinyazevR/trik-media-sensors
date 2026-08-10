@@ -17,11 +17,15 @@
 #include <ti/sysbios/BIOS.h>
 #include <ti/sysbios/knl/Task.h>
 
+#include <ti/sysbios/family/c64p/Cache.h>
+
 #include <trik/buffer.h>
 #include <trik/sensors/cmd.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/cv_algorithms.h>
 #include <trik/sensors/msg.h>
+
+#include <string.h>
 
 int8_t __attribute__((aligned(128))) out_buff[BUFFER_SIZE];
 int8_t __attribute__((aligned(128))) in_buff[BUFFER_SIZE];
@@ -130,6 +134,9 @@ static int trik_handle_init(struct trik_msg* req) {
 
 static int trik_handle_sensor(struct trik_req_cv_algorithm_msg* req) {
   cv_algorithm = trik_cv_algorithm_from_cmd(req->header.cmd);
+  printf("DSP: trik_handle_sensor cmd=%d algo=%d vfmt=%d linelen=%u\n",
+         (int)req->header.cmd, (int)cv_algorithm,
+         (int)req->video_format, (unsigned)req->line_length);
 
   struct trik_msg* res = (struct trik_msg*) req;
 
@@ -150,10 +157,26 @@ static int trik_handle_sensor(struct trik_req_cv_algorithm_msg* req) {
 static int trik_handle_step(struct trik_msg* req) {
   struct trik_res_step_msg* res = (struct trik_res_step_msg*) req;
 
+  memset(out_buff, 0xCD, 32);
+  Cache_wbInv(out_buff, 32, Cache_Type_ALL, TRUE);
+  printf("DSP: trik_handle_step ENTER cv_algorithm=%d out_buff[0-7]: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         (int)cv_algorithm,
+         (unsigned char)out_buff[0], (unsigned char)out_buff[1],
+         (unsigned char)out_buff[2], (unsigned char)out_buff[3],
+         (unsigned char)out_buff[4], (unsigned char)out_buff[5],
+         (unsigned char)out_buff[6], (unsigned char)out_buff[7]);
+
   if (!trik_run_cv_algorithm(cv_algorithm, in_buffer, out_buffer, res->in_args, &(res->out_args))) {
     Log_print0(Diags_INFO, "trik_handle_step(): unable to run cv algorithm");
+    printf("DSP: trik_handle_step FAILED cv_algorithm=%d\n", (int)cv_algorithm);
     return -1;
   }
+
+  printf("DSP: trik_handle_step DONE out_buff[0-7]: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         (unsigned char)out_buff[0], (unsigned char)out_buff[1],
+         (unsigned char)out_buff[2], (unsigned char)out_buff[3],
+         (unsigned char)out_buff[4], (unsigned char)out_buff[5],
+         (unsigned char)out_buff[6], (unsigned char)out_buff[7]);
 
   if (trik_res_msg((struct trik_msg*) res) < 0) {
     Log_print0(Diags_INFO, "trik_handle_step(): unable to send ack about step");
@@ -173,6 +196,15 @@ Int trik_start_dsp_server(Void) {
   in_buffer.length = BUFFER_SIZE;
   out_buffer.start = (void*) &out_buff;
   out_buffer.length = BUFFER_SIZE;
+
+  memset(out_buff, 0xAB, 32);
+  Cache_wbInv(out_buff, 32, Cache_Type_ALL, TRUE);
+  printf("DSP: out_buff(phys=%p) init pattern [0-31]: %02x %02x %02x %02x %02x %02x %02x %02x ...\n",
+         out_buffer.start,
+         (unsigned char)out_buff[0], (unsigned char)out_buff[1],
+         (unsigned char)out_buff[2], (unsigned char)out_buff[3],
+         (unsigned char)out_buff[4], (unsigned char)out_buff[5],
+         (unsigned char)out_buff[6], (unsigned char)out_buff[7]);
 
   while (running) {
     status = trik_wait_for_msg(&msg);

@@ -3,6 +3,8 @@
 #include <trik/sensors/cv_algorithms.hpp>
 #include <trik/sensors/video_format.h>
 
+#include <stdio.h>
+
 namespace trik {
 namespace sensors {
 
@@ -45,18 +47,39 @@ extern "C" int trik_run_cv_algorithm(enum trik_cv_algorithm algorithm, struct bu
   struct trik_cv_algorithm_in_args in_args, struct trik_cv_algorithm_out_args* out_args) {
   ImageBuffer inBuffer = { .m_ptr = (int8_t*) in_buffer.start, .m_size = in_buffer.length };
   ImageBuffer outBuffer = { .m_ptr = (int8_t*) out_buffer.start, .m_size = out_buffer.length };
-  if (algorithm == TRIK_CV_ALGORITHM_MOTION_SENSOR)
-    return motionSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
-  else if (algorithm == TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR)
-    return edgeLineSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
-  else if (algorithm == TRIK_CV_ALGORITHM_OBJECT_SENSOR)
-    return objectSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
-  else if (algorithm == TRIK_CV_ALGORITHM_LINE_SENSOR)
-    return lineSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
-  else if (algorithm == TRIK_CV_ALGORITHM_MXN_SENSOR)
-    return mxnSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
-  else
-    return 0;
+  int result = 0;
+  if (algorithm == TRIK_CV_ALGORITHM_MOTION_SENSOR) {
+    printf("DSP: run algo=MOTION in=%p/%zu out=%p/%zu\n",
+           inBuffer.m_ptr, inBuffer.m_size, outBuffer.m_ptr, outBuffer.m_size);
+    result = motionSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
+  } else if (algorithm == TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR) {
+    printf("DSP: run algo=EDGE_LINE in=%p/%zu out=%p/%zu\n",
+           inBuffer.m_ptr, inBuffer.m_size, outBuffer.m_ptr, outBuffer.m_size);
+    result = edgeLineSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
+  } else if (algorithm == TRIK_CV_ALGORITHM_OBJECT_SENSOR) {
+    printf("DSP: run algo=OBJECT in=%p/%zu out=%p/%zu\n",
+           inBuffer.m_ptr, inBuffer.m_size, outBuffer.m_ptr, outBuffer.m_size);
+    result = objectSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
+  } else if (algorithm == TRIK_CV_ALGORITHM_LINE_SENSOR) {
+    printf("DSP: run algo=LINE in=%p/%zu out=%p/%zu\n",
+           inBuffer.m_ptr, inBuffer.m_size, outBuffer.m_ptr, outBuffer.m_size);
+    result = lineSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
+    printf("DSP: run algo=LINE out[0-7]=%02x %02x %02x %02x %02x %02x %02x %02x result=%d\n",
+           (unsigned char)outBuffer.m_ptr[0], (unsigned char)outBuffer.m_ptr[1],
+           (unsigned char)outBuffer.m_ptr[2], (unsigned char)outBuffer.m_ptr[3],
+           (unsigned char)outBuffer.m_ptr[4], (unsigned char)outBuffer.m_ptr[5],
+           (unsigned char)outBuffer.m_ptr[6], (unsigned char)outBuffer.m_ptr[7], result);
+  } else if (algorithm == TRIK_CV_ALGORITHM_MXN_SENSOR) {
+    printf("DSP: run algo=MXN in=%p/%zu out=%p/%zu\n",
+           inBuffer.m_ptr, inBuffer.m_size, outBuffer.m_ptr, outBuffer.m_size);
+    result = mxnSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
+  } else {
+    printf("DSP: run algo=NONE/FALLBACK in=%p/%zu out=%p/%zu\n",
+           inBuffer.m_ptr, inBuffer.m_size, outBuffer.m_ptr, outBuffer.m_size);
+    result = 0;
+  }
+  printf("DSP: run algo DONE result=%d\n", result);
+  return result;
 }
 
 }
