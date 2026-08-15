@@ -13,6 +13,7 @@ EdgeLineSensorCvAlgorithm edgeLineSensorCvAlgorithm;
 ObjectSensorCvAlgorithm objectSensorCvAlgorithm;
 LineSensorCvAlgorithm lineSensorCvAlgorithm;
 MxnSensorCvAlgorithm mxnSensorCvAlgorithm;
+JpegEncoderCvAlgorithm jpegEncoderCvAlgorithm;
 
 extern "C" int trik_init_cv_algorithm(enum trik_cv_algorithm algorithm, enum VideoFormat video_format, uint32_t line_length) {
   ImageDesc inDesc = {
@@ -37,6 +38,8 @@ extern "C" int trik_init_cv_algorithm(enum trik_cv_algorithm algorithm, enum Vid
     return lineSensorCvAlgorithm.setup(inDesc, outDesc, fastRam, sizeof(fastRam) / sizeof(fastRam[0]));
   else if (algorithm == TRIK_CV_ALGORITHM_MXN_SENSOR)
     return mxnSensorCvAlgorithm.setup(inDesc, outDesc, fastRam, sizeof(fastRam) / sizeof(fastRam[0]));
+  else if (algorithm == TRIK_CV_ALGORITHM_JPEG_ENCODER)
+    return jpegEncoderCvAlgorithm.setup(inDesc, outDesc, fastRam, sizeof(fastRam) / sizeof(fastRam[0]));
   else
     return 0;
 }
@@ -55,6 +58,8 @@ extern "C" int trik_run_cv_algorithm(enum trik_cv_algorithm algorithm, struct bu
     return lineSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
   else if (algorithm == TRIK_CV_ALGORITHM_MXN_SENSOR)
     return mxnSensorCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
+  else if (algorithm == TRIK_CV_ALGORITHM_JPEG_ENCODER)
+    return jpegEncoderCvAlgorithm.run(inBuffer, outBuffer, in_args, *out_args);
   else
     return 0;
 }

@@ -495,5 +495,6 @@ uint16_t* restrict CvAlgorithm<VideoFormat::YUV422, VideoFormat::RGB565X>::s_mul
 #include "motion_sensor.hpp"
 #include "mxn_sensor.hpp"
 #include "object_sensor.hpp"
+#include "jpeg_encoder.hpp"
 
 #endif

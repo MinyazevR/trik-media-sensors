@@ -28,6 +28,8 @@ typedef struct trik_cv_algorithm_in_args {
   uint8_t detect_val_from;  // [0..100]
   uint8_t detect_val_to;    // [0..100]
   bool auto_detect_hsv;     // [true|false]
+  uint8_t jpeg_image_quality; // [1..100], only for TRIK_CV_ALGORITHM_JPEG_ENCODER
+  bool if_black_and_white;    // [true|false], only for TRIK_CV_ALGORITHM_JPEG_ENCODER
 
   union {
     MxnParams mxnParams;
@@ -61,6 +63,7 @@ typedef struct trik_cv_algorithm_out_args {
   uint8_t detect_sat_to;    // [0..100]
   uint8_t detect_val_from;  // [0..100]
   uint8_t detect_val_to;    // [0..100]
+  uint32_t jpeg_size;       // [bytes], only for TRIK_CV_ALGORITHM_JPEG_ENCODER
 } trik_cv_algorithm_out_args;
 
 #if defined(__cplusplus)

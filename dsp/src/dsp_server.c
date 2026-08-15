@@ -50,6 +50,8 @@ enum trik_cv_algorithm trik_cv_algorithm_from_cmd(enum trik_cmd cmd) {
     return TRIK_CV_ALGORITHM_OBJECT_SENSOR;
   else if (cmd == TRIK_CMD_MXN_SENSOR)
     return TRIK_CV_ALGORITHM_MXN_SENSOR;
+  else if (cmd == TRIK_CMD_JPEG_ENCODER)
+    return TRIK_CV_ALGORITHM_JPEG_ENCODER;
   else
     return TRIK_CV_ALGORITHM_NONE;
 }
