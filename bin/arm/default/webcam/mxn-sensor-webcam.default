@@ -1,4 +1,0 @@
-#mxn-sensor-webcam default opts
-VIDEO_PORT=2
-VIDEO_PATH=/dev/video$VIDEO_PORT
-DEFAULT_OPS='--v4l2-path=$VIDEO_PATH --mxn-width-m=3 --mxn-height-n=3 --v4l2-format=yuv422 --v4l2-width=320 --v4l2-height=240 --sensor-type=mxn_sensor --rc-fifo-in=/run/mxn-sensor.in.fifo --rc-fifo-out=/run/mxn-sensor.out.fifo'
