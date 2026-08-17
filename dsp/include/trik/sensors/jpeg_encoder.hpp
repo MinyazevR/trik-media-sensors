@@ -206,6 +206,8 @@ class JPGEncoder
   int byteoutCnt;
   int bytenew;
   int bytepos;
+  uint32_t m_outCapacity = 0;
+  bool m_overrun = false;
 
   int DU[64];
   int YDU[64];
@@ -278,7 +280,11 @@ class JPGEncoder
 
   void writeByte(int value)
   {
-    byteoutPtr[byteoutCnt++] = value;
+    if (byteoutCnt >= static_cast<int>(m_outCapacity)) {
+      m_overrun = true;
+      return;
+    }
+    byteoutPtr[byteoutCnt++] = static_cast<uint8_t>(value);
   }
 
   void writeWord(uint16_t value)
@@ -599,19 +605,25 @@ class JPGEncoder
 
   // YCbCr NV16 - img format
   // Two planes: Y plane and CbCr combined plane
-  void getBlock(const uint8_t* img, int xpos, int ypos, int width, int height)
+  // Decodes one 8x8 macroblock from an NV16 image. The Y and the interleaved
+  // U/V planes are addressed with the same @p lineLength stride (the V4L2
+  // bytesperline), exactly like CvAlgorithm::convertImageNV16ToHsv does, so a
+  // padded frame never drifts out of sync. Chroma is 4:2:2 (U = high byte,
+  // V = low byte of each interleaved 16-bit word).
+  void getBlock(const uint8_t* img, int xpos, int ypos, int width, int height, int lineLength)
   {
-    const uint16_t* UV = reinterpret_cast<const uint16_t*>(img + width * height * sizeof(uint8_t));
+    const uint8_t* restrict yPlane = img;
+    const uint8_t* restrict uvPlane = img + lineLength * height;
 
     int pos = 0;
     #pragma MUST_ITERATE(8, ,8)
     for (int y = 0; y < 8; y++) {
-      const int y_shift = (ypos + y) * width;
+      const int rowOffset = (ypos + y) * lineLength;
       #pragma MUST_ITERATE(8, ,8)
       for (int x = 0; x < 8; x++) {
-        const int xy_shift = y_shift + (xpos + x);
-        const uint16_t uv = UV[xy_shift / 2];
-        YDU[pos] = img[xy_shift] - 128;
+        const int px = xpos + x;
+        const uint16_t uv = *reinterpret_cast<const uint16_t*>(uvPlane + rowOffset + (px / 2) * 2);
+        YDU[pos] = yPlane[rowOffset + px] - 128;
         UDU[pos] = static_cast<uint8_t>(uv >> 8) - 128;
         VDU[pos] = static_cast<uint8_t>(uv) - 128;
         pos++;
@@ -644,11 +656,14 @@ class JPGEncoder
    * @param image NV16 image: Y plane (width*height) followed by interleaved U/V plane.
    * @return number of bytes written into imageout.
    */
-  uint32_t encode(const uint8_t* image, int width, int height, uint8_t* imageout)
+  uint32_t encode(const uint8_t* image, int width, int height, int lineLength,
+                  uint8_t* imageout, uint32_t maxOut)
   {
     // Initialize bit writer
     byteoutPtr = imageout;
     byteoutCnt = 0;
+    m_outCapacity = maxOut;
+    m_overrun = false;
 
     bytenew = 0;
     bytepos = 8;
@@ -670,7 +685,7 @@ class JPGEncoder
 
     for (int ypos = 0; ypos < height; ypos += 8) {
       for (int xpos = 0; xpos < width; xpos += 8) {
-        getBlock(image, xpos, ypos, width, height);
+        getBlock(image, xpos, ypos, width, height, lineLength);
         DCY = processDU(YDU, fdtbl_Y, DCY, s_ydcHt, s_yacHt);
         if (!ifBlackAndWhite) {
           DCU = processDU(UDU, fdtbl_UV, DCU, s_uvdcHt, s_uvacHt);
@@ -691,7 +706,7 @@ class JPGEncoder
 
     writeWord(0xFFD9); // EOI
 
-    return byteoutCnt;
+    return m_overrun ? 0 : static_cast<uint32_t>(byteoutCnt);
   }
 };
 
@@ -744,19 +759,38 @@ public:
   }
 
   virtual bool run(const ImageBuffer& _inImage, ImageBuffer& _outImage, const trik_cv_algorithm_in_args& _inArgs, trik_cv_algorithm_out_args& _outArgs) {
-    if (m_inImageDesc.m_height * m_inImageDesc.m_lineLength > _inImage.m_size)
+    // The input frame is written to DDR by the host (uncached, via /dev/mem
+    // O_SYNC) and is not covered by the rpmsg MessageQ cache handling. The
+    // sensor algorithms re-read through their big scratch buffers, so the stale
+    // cache lines get thrashed out naturally; the JPEG encoder reads the frame
+    // directly, so it must explicitly invalidate the data caches first. Use
+    // Cache_Type_ALLD (L1D+L2D, no program cache) to keep the cost low.
+    Cache_inv(_inImage.m_ptr, _inImage.m_size, Cache_Type_ALLD, TRUE);
+
+    const uint32_t width = m_inImageDesc.m_width;
+    const uint32_t height = m_inImageDesc.m_height;
+    const uint32_t lineLength = m_inImageDesc.m_lineLength;
+
+    // NV16 has two planes (Y + interleaved U/V) of `lineLength` bytes per row;
+    // YUYV is a single plane. Validate that the whole frame is available.
+    const uint64_t requiredInput = static_cast<uint64_t>(height) * lineLength * (m_isYuyv ? 1u : 2u);
+    if (requiredInput > _inImage.m_size)
       return false;
 
     const uint8_t* src = reinterpret_cast<const uint8_t*>(_inImage.m_ptr);
+    uint32_t srcStride = lineLength;
     if (m_isYuyv) {
       convertYuyvToNv16(_inImage, s_nv16Buffer);
       src = reinterpret_cast<const uint8_t*>(s_nv16Buffer);
+      srcStride = width; // the internal NV16 buffer is tightly packed
     }
 
     jpgEncoder.init(_inArgs.jpeg_image_quality, _inArgs.if_black_and_white);
-    const uint32_t size = jpgEncoder.encode(src, m_inImageDesc.m_width, m_inImageDesc.m_height,
-                                            reinterpret_cast<uint8_t*>(_outImage.m_ptr));
-    if (size > _outImage.m_size)
+    const uint32_t size = jpgEncoder.encode(src, static_cast<int>(width), static_cast<int>(height),
+                                            static_cast<int>(srcStride),
+                                            reinterpret_cast<uint8_t*>(_outImage.m_ptr),
+                                            static_cast<uint32_t>(_outImage.m_size));
+    if (size == 0 || size > _outImage.m_size)
       return false;
 
     _outImage.m_size = size;
