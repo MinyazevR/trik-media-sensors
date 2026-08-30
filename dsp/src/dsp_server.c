@@ -7,9 +7,13 @@
 #include <xdc/runtime/Diags.h>
 #include <xdc/runtime/Log.h>
 #include <xdc/runtime/Registry.h>
+#include <xdc/runtime/System.h>
 #include <xdc/std.h>
 
+#include <stdint.h>
 #include <stdio.h>
+
+#include <c6x.h>
 
 #include <ti/ipc/MessageQ.h>
 #include <ti/ipc/MultiProc.h>
@@ -38,6 +42,77 @@ static enum trik_cv_algorithm cv_algorithm = TRIK_CV_ALGORITHM_NONE;
 
 static struct buffer in_buffer;
 static struct buffer out_buffer;
+
+/*
+ * DSP CPU clock (PLL0 SYSCLK1 = ARM CPU clock). Used only to convert the
+ * free-running cycle counter (TSCL/TSCH) to microseconds. Must match the
+ * board's actual frequency: TRIK ships 300 / 408 / 456 MHz depending on the
+ * u-boot PLL setup. The raw cycle counts are also printed so the value can be
+ * verified independently of this constant.
+ */
+#define DSP_CPU_FREQ_HZ 372000000u
+#define TSC_TO_US(cycles) ((uint32_t)((uint64_t)(cycles) * 1000000u / DSP_CPU_FREQ_HZ))
+
+/* Emit a per-algorithm report every N processed frames. */
+#define STATS_REPORT_FRAMES 100u
+
+#define ALGO_STATS_COUNT (TRIK_CV_ALGORITHM_JPEG_ENCODER + 1)
+
+typedef struct {
+  uint32_t frames;
+  uint64_t cycles_total;
+  uint32_t cycles_min;
+  uint32_t cycles_max;
+} AlgoStats;
+
+static AlgoStats g_stats[ALGO_STATS_COUNT];
+static uint32_t g_total_frames = 0;
+
+static inline uint64_t tsc_read64(void) {
+  uint32_t lo = (uint32_t) TSCL;
+  uint32_t hi = (uint32_t) TSCH;
+  uint32_t lo2 = (uint32_t) TSCL;
+  if (lo2 < lo)
+    hi = (uint32_t) TSCH;
+  return ((uint64_t) hi << 32) | lo2;
+}
+
+static const char *algo_name(enum trik_cv_algorithm a) {
+  switch (a) {
+    case TRIK_CV_ALGORITHM_MOTION_SENSOR:    return "motion";
+    case TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR: return "edge_line";
+    case TRIK_CV_ALGORITHM_LINE_SENSOR:      return "line";
+    case TRIK_CV_ALGORITHM_OBJECT_SENSOR:    return "object";
+    case TRIK_CV_ALGORITHM_MXN_SENSOR:       return "mxn";
+    case TRIK_CV_ALGORITHM_JPEG_ENCODER:     return "jpeg";
+    default:                                 return "unknown";
+  }
+}
+
+static void report_stats(void) {
+  int i;
+  /* Both Log_print and System_printf end up in the same SysMin trace buffer
+   * (.tracebuf in DDR), read by the Linux remoteproc trace driver via
+   * /sys/kernel/debug/remoteproc/remoteproc0/trace0. ti.trace.SysMin only
+   * publishes a line once a '\n' is seen, so every format string ends with it.
+   */
+  System_printf("[DSP-stats] total frames=%u (assumed DSP clock %u Hz)\n",
+                (unsigned) g_total_frames, (unsigned) DSP_CPU_FREQ_HZ);
+  for (i = 0; i < ALGO_STATS_COUNT; ++i) {
+    AlgoStats *s = &g_stats[i];
+    uint32_t avg_us, min_us, max_us, max_fps;
+    if (s->frames == 0)
+      continue;
+    avg_us = TSC_TO_US(s->cycles_total / s->frames);
+    min_us = TSC_TO_US(s->cycles_min);
+    max_us = TSC_TO_US(s->cycles_max);
+    max_fps = avg_us > 0 ? 1000000u / avg_us : 0;
+    System_printf("[DSP-stats] %s frames=%u avg=%u us min=%u us max=%u us -> %u fps\n",
+                  algo_name((enum trik_cv_algorithm) i), (unsigned) s->frames,
+                  (unsigned) avg_us, (unsigned) min_us, (unsigned) max_us,
+                  (unsigned) max_fps);
+  }
+}
 
 enum trik_cv_algorithm trik_cv_algorithm_from_cmd(enum trik_cmd cmd) {
   if (cmd == TRIK_CMD_MOTION_SENSOR)
@@ -151,8 +226,31 @@ static int trik_handle_sensor(struct trik_req_cv_algorithm_msg* req) {
 
 static int trik_handle_step(struct trik_msg* req) {
   struct trik_res_step_msg* res = (struct trik_res_step_msg*) req;
+  uint64_t t0, t1;
+  uint32_t cycles;
+  int ok;
 
-  if (!trik_run_cv_algorithm(cv_algorithm, in_buffer, out_buffer, res->in_args, &(res->out_args))) {
+  t0 = tsc_read64();
+  ok = trik_run_cv_algorithm(cv_algorithm, in_buffer, out_buffer, res->in_args, &(res->out_args));
+  t1 = tsc_read64();
+  cycles = (uint32_t) (t1 - t0);
+  res->out_args.process_time_us = TSC_TO_US(cycles);
+
+  if (ok && cv_algorithm >= 0 && cv_algorithm < ALGO_STATS_COUNT) {
+    AlgoStats* s = &g_stats[cv_algorithm];
+    s->frames++;
+    s->cycles_total += cycles;
+    if (s->cycles_min == 0 || cycles < s->cycles_min)
+      s->cycles_min = cycles;
+    if (cycles > s->cycles_max)
+      s->cycles_max = cycles;
+
+    g_total_frames++;
+    if ((g_total_frames % STATS_REPORT_FRAMES) == 0)
+      report_stats();
+  }
+
+  if (!ok) {
     Log_print0(Diags_INFO, "trik_handle_step(): unable to run cv algorithm");
     return -1;
   }

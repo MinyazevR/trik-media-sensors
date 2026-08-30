@@ -64,6 +64,7 @@ typedef struct trik_cv_algorithm_out_args {
   uint8_t detect_val_from;  // [0..100]
   uint8_t detect_val_to;    // [0..100]
   uint32_t jpeg_size;       // [bytes], only for TRIK_CV_ALGORITHM_JPEG_ENCODER
+  uint32_t process_time_us; // [us] DSP time spent running the algorithm for this frame
 } trik_cv_algorithm_out_args;
 
 #if defined(__cplusplus)
